@@ -1487,17 +1487,27 @@ static void ggml_vec_dot_i2_i8_s_1x1(int n, float * s, size_t bs, const void * v
         s[row] = (float)sumi;
     }
 #else
-    // Scalar fallback
+    // Scalar fallback: mirrors the AVX2 kernel's layout and output convention.
+    // Each 128-element block is 32 bytes; byte j holds elements j, j+32, j+64, j+96
+    // in bits 7-6, 5-4, 3-2, 1-0. Raw codes {0,1,2} are summed; the caller
+    // subtracts the activation sum to recover the signed ternary dot product.
+    assert(n % 128 == 0);
     const uint8_t * x = (const uint8_t *)vx;
-    const int8_t * y  = (const int8_t *)vy;
-    static const int map2bit[4] = { -1, 0, 1, 0 };
+    const int8_t  * y = (const int8_t  *)vy;
+    const int nb = n / 128;
     for (int row = 0; row < nrc; row++) {
+        const uint8_t * x_row = x + row * bx / 4;
         int32_t sum = 0;
-        for (int i = 0; i < n; i++) {
-            int byte_idx = i / 4;
-            int bit_pos = 6 - 2 * (i % 4);
-            int w = map2bit[(x[row * (n/4) + byte_idx] >> bit_pos) & 0x03];
-            sum += w * y[i];
+        for (int b = 0; b < nb; b++) {
+            const uint8_t * px = x_row + b * 32;
+            const int8_t  * py = y + b * 128;
+            for (int j = 0; j < 32; j++) {
+                const uint8_t v = px[j];
+                sum += ((v >> 6) & 3) * py[j];
+                sum += ((v >> 4) & 3) * py[j + 32];
+                sum += ((v >> 2) & 3) * py[j + 64];
+                sum += ( v       & 3) * py[j + 96];
+            }
         }
         s[row] = (float)sum;
     }
