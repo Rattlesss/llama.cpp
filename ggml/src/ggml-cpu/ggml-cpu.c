@@ -1207,7 +1207,7 @@ static void ggml_compute_forward_mul_mat_one_chunk(
     const int64_t blck_0 = 16;
     const int64_t blck_1 = 16;
 
-    const size_t src1_col_stride = src1_cont || src1->type != vec_dot_type ? row_size : nb11;
+    const size_t src1_col_stride = ggml_is_contiguous(src1) || src1->type != vec_dot_type ? row_size : nb11;
 
     // attempt to reduce false-sharing (does not seem to make a difference)
     // 16 * 2, accounting for mmla kernels
@@ -1492,7 +1492,7 @@ UseGgmlGemm2:;
     if (src0->type == GGML_TYPE_I2_S && ggml_n_dims(src0) == 2) {
         const void * src1_wdata = (src1->type == vec_dot_type) ? src1->data : params->wdata;
         const size_t i2s_row_size = ggml_row_size(vec_dot_type, ne10);
-        const size_t src1_col_stride = src1_cont || src1->type != vec_dot_type ? i2s_row_size : nb11;
+        const size_t src1_col_stride = ggml_is_contiguous(src1) || src1->type != vec_dot_type ? i2s_row_size : nb11;
 
         const int64_t matmul_num_cols = 4; // gemm processes 4 columns at a time
         int64_t src0_start = (ith * ne01) / nth;
