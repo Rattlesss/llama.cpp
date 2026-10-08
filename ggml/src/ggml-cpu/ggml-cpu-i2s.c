@@ -184,21 +184,9 @@ void ggml_gemm_i2_i8_s(int n, float * GGML_RESTRICT s, size_t bs, const void * G
     const int64_t row_block = ROW_BLOCK_SIZE;
     const int64_t col_block = COL_BLOCK_SIZE;
 
-#if defined(ACT_PARALLEL)
-    for (int64_t c0 = 0; c0 < nc; c0 += col_block) {
-        int64_t cur_c = (c0 + col_block <= nc) ? col_block : (nc - c0);
-        for (int64_t r0 = 0; r0 < nr; r0 += row_block) {
-            int64_t cur_r = (r0 + row_block <= nr) ? row_block : (nr - r0);
-            const void * vy_r = (const uint8_t *)vy + r0 * n;
-            for (int64_t c = 0; c < cur_c; ++c) {
-                const int64_t col = c0 + c;
-                float * s_col = s + col;
-                const void * vx_col = (const uint8_t *)vx + col * n / 4;
-                ggml_vec_dot_i2_i8_s(n, s_col + r0 * bs, bs, vx_col, n, vy_r, n, cur_r);
-            }
-        }
-    }
-#else
+    // ACT_PARALLEL variant removed: it called ggml_vec_dot_i2_i8_s as if nrc counted
+    // activation columns (with bs/by strides), but the kernel treats nrc as weight
+    // rows against a single activation vector, leaving most of s unwritten.
     for (int64_t r0 = 0; r0 < nr; r0 += row_block) {
         int64_t cur_r = (r0 + row_block <= nr) ? row_block : (nr - r0);
         const void * vy_row = (const uint8_t *)vy + r0 * n;
@@ -213,7 +201,6 @@ void ggml_gemm_i2_i8_s(int n, float * GGML_RESTRICT s, size_t bs, const void * G
             }
         }
     }
-#endif
 #endif // __AVX2__
 }
 
