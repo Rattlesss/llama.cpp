@@ -163,7 +163,7 @@ llama_model_bitnet::graph::graph(const llama_model & model, const llm_graph_para
 
     // lm_head
     // FIXME: do not use model.tok_embd directly, duplicate as model.output
-    cur = build_lora_mm(model.tok_embd, cur);
+    cur = build_lora_mm(model.output ? model.output : model.tok_embd, cur);
 
     cb(cur, "result_output", -1);
     res->t_logits = cur;
