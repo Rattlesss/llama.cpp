@@ -17,6 +17,7 @@ void llama_model_bitnet::load_arch_tensors(llama_model_loader &) {
 
     // output
     output_norm = create_tensor(tn(LLM_TENSOR_OUTPUT_NORM, "weight"), {n_embd}, 0);
+    output = create_tensor(tn(LLM_TENSOR_OUTPUT, "weight"), {n_embd, n_vocab}, TENSOR_NOT_REQUIRED);
 
     for (int i = 0; i < n_layer; ++i) {
         auto & layer = layers[i];
