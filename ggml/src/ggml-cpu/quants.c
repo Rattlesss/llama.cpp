@@ -1486,6 +1486,35 @@ static void ggml_vec_dot_i2_i8_s_1x1(int n, float * s, size_t bs, const void * v
         int sumi = hsum_i32_8(accu);
         s[row] = (float)sumi;
     }
+#elif defined(__ARM_NEON) && defined(__ARM_FEATURE_DOTPROD)
+    // NEON dot-product kernel with the same layout and output convention as the
+    // scalar fallback. The raw codes {0,1,2} fit in int8, so vdotq_s32 sums them
+    // exactly in 32 bits; the caller subtracts the activation sum afterwards.
+    assert(n % 128 == 0);
+    const uint8_t * x = (const uint8_t *)vx;
+    const int8_t  * y = (const int8_t  *)vy;
+    const int nb = n / 128;
+    const uint8x16_t m3 = vdupq_n_u8(3);
+    for (int row = 0; row < nrc; row++) {
+        const uint8_t * x_row = x + row * bx / 4;
+        int32x4_t acc0 = vdupq_n_s32(0);
+        int32x4_t acc1 = vdupq_n_s32(0);
+        for (int b = 0; b < nb; b++) {
+            const uint8_t * px = x_row + b * 32;
+            const int8_t  * py = y + b * 128;
+            const uint8x16_t w0 = vld1q_u8(px);
+            const uint8x16_t w1 = vld1q_u8(px + 16);
+            acc0 = vdotq_s32(acc0, vreinterpretq_s8_u8(vshrq_n_u8(w0, 6)), vld1q_s8(py));
+            acc1 = vdotq_s32(acc1, vreinterpretq_s8_u8(vandq_u8(vshrq_n_u8(w0, 4), m3)), vld1q_s8(py + 32));
+            acc0 = vdotq_s32(acc0, vreinterpretq_s8_u8(vandq_u8(vshrq_n_u8(w0, 2), m3)), vld1q_s8(py + 64));
+            acc1 = vdotq_s32(acc1, vreinterpretq_s8_u8(vandq_u8(w0, m3)), vld1q_s8(py + 96));
+            acc0 = vdotq_s32(acc0, vreinterpretq_s8_u8(vshrq_n_u8(w1, 6)), vld1q_s8(py + 16));
+            acc1 = vdotq_s32(acc1, vreinterpretq_s8_u8(vandq_u8(vshrq_n_u8(w1, 4), m3)), vld1q_s8(py + 48));
+            acc0 = vdotq_s32(acc0, vreinterpretq_s8_u8(vandq_u8(vshrq_n_u8(w1, 2), m3)), vld1q_s8(py + 80));
+            acc1 = vdotq_s32(acc1, vreinterpretq_s8_u8(vandq_u8(w1, m3)), vld1q_s8(py + 112));
+        }
+        s[row] = (float)vaddvq_s32(vaddq_s32(acc0, acc1));
+    }
 #else
     // Scalar fallback: mirrors the AVX2 kernel's layout and output convention.
     // Each 128-element block is 32 bytes; byte j holds elements j, j+32, j+64, j+96
